@@ -1,0 +1,145 @@
+
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RayGPT">
+  <link rel="apple-touch-icon" href="https://chat.openai.com/apple-touch-icon.png">
+  <title>RayGPT - iPhone 桌面版</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      width: 100vw; height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f2f2f2;
+      display: flex;
+      flex-direction: column;
+    }
+    #main {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      padding: 1rem;
+      overflow: hidden;
+    }
+    #result {
+      flex: 1;
+      overflow-y: auto;
+      background: #fff;
+      padding: 10px;
+      border: 1px solid #ccc;
+    }
+    textarea {
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 1rem;
+      font-size: 1rem;
+    }
+    button {
+      padding: 0.6rem 1rem;
+      font-size: 1rem;
+      margin-top: 0.5rem;
+    }
+    #cost {
+      font-size: 0.9rem;
+      color: #666;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="main">
+    <h2>R GPT</h2>
+    <input type="file" id="imageInput" accept="image/*">
+    <textarea id="userPrompt" rows="3" placeholder="请输入你的问题..."></textarea>
+    <button onclick="analyze()">发送</button>
+    <div id="cost">💰 本次花费：$0.000｜今日累计：$0.000</div>
+    <div id="result"></div>
+  </div>
+
+  <script>
+   let API_KEY = localStorage.getItem("openai_api_key");
+
+if (!API_KEY) {
+  API_KEY = prompt("Please enter your OpenAI API key:");
+  if (API_KEY) {
+    localStorage.setItem("openai_api_key", API_KEY);
+  } else {
+    alert("❗️API key is required to continue.");
+    throw new Error("No API key provided");
+  }
+}
+    const messageHistory = [];
+    let dailyCost = 0;
+
+    function analyze() {
+      const imageInput = document.getElementById('imageInput');
+      const prompt = document.getElementById('userPrompt').value.trim();
+      const model = 'gpt-4o-mini';
+      const contents = [];
+
+      if (!prompt && !imageInput.files[0]) {
+        alert('请输入问题或上传图片');
+        return;
+      }
+
+      if (imageInput.files[0]) {
+        const reader = new FileReader();
+        reader.onloadend = function () {
+          const base64Image = reader.result;
+          contents.push({ type: "image_url", image_url: { url: base64Image } });
+          if (prompt) contents.push({ type: "text", text: prompt });
+          messageHistory.push({ role: "user", content: contents });
+          document.getElementById('userPrompt').value = '';
+          sendToGPT(model, contents);
+        };
+        reader.readAsDataURL(imageInput.files[0]);
+      } else {
+        contents.push({ type: "text", text: prompt });
+        messageHistory.push({ role: "user", content: contents });
+        document.getElementById('userPrompt').value = '';
+        sendToGPT(model, contents);
+      }
+    }
+
+    async function sendToGPT(model, userContent) {
+      const resultBox = document.getElementById('result');
+      const costElement = document.getElementById('cost');
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${API_KEY}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: messageHistory,
+          max_tokens: 1000
+        })
+      });
+
+      const data = await response.json();
+      const reply = data.choices?.[0]?.message?.content || "(未收到有效回复)";
+      messageHistory.push({ role: "assistant", content: reply });
+
+      const userText = (userContent || []).map(c => c.text || '[图片]').join('<br>');
+      resultBox.innerHTML += `
+        <div><strong>你：</strong><br>${userText}</div>
+        <div><strong>GPT：</strong><br>${reply}</div>
+        <hr>
+      `;
+      resultBox.scrollTop = resultBox.scrollHeight;
+
+      const inputTokens = 300, outputTokens = 500;
+      const costPerInput = 0.00015, costPerOutput = 0.0006;
+      const totalCost = (inputTokens * costPerInput + outputTokens * costPerOutput) / 1000;
+      dailyCost += totalCost;
+      costElement.innerText = `💰 本次花费：$${totalCost.toFixed(6)}｜今日累计：$${dailyCost.toFixed(6)}`;
+    }
+  </script>
+</body>
+</html>
