@@ -169,7 +169,25 @@ async function sendMessage() {
 
         const userDiv = document.createElement("div");
         userDiv.className = "message user";
-        userDiv.textContent = text || "[图片]";
+        
+    if (text) {
+        const textNode = document.createTextNode(text);
+        userDiv.appendChild(textNode);
+    }
+    if (imageInput.files.length > 0) {
+        const file = imageInput.files[0];
+        const img = document.createElement("img");
+        img.style.maxWidth = "200px";
+        img.style.marginTop = "0.5em";
+        img.style.border = "1px solid #ccc";
+        const reader = new FileReader();
+        reader.onload = () => {
+            img.src = reader.result;
+            userDiv.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+    }
+    
         userDiv.style.fontSize = fontSizeSelect.value;
         messagesEl.appendChild(userDiv);
         messagesEl.scrollTop = messagesEl.scrollHeight;
