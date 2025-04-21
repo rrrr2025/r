@@ -1,0 +1,251 @@
+
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>LizGPT 多轮对话 + Markdown</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js">
+document.getElementById('toggleSidebar').onclick = function () {
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar.style.display === 'none' || !sidebar.style.display) {
+    sidebar.style.display = 'flex';
+  } else {
+    sidebar.style.display = 'none';
+  }
+};
+
+</script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            background: #f7f7f8;
+            font-family: "Segoe UI", Roboto, sans-serif;
+        }
+        .container { flex-direction: column;
+            display: flex;
+            height: 100%;
+        }
+        .sidebar { display: none; flex-direction: row; justify-content: space-between; align-items: center; background: #2e2e2e; color: white; padding: 0.5em 1em; }
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .toolbar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0.5em 1em;
+            background: #e6e6e6;
+        }
+        .toolbar label, .toolbar select {
+            margin-left: 0.5em;
+            font-size: 0.9em;
+        }
+        .messages {
+            flex: 1;
+            padding: 1em;
+            overflow-y: auto;
+        }
+        .message {
+            max-width: 80%;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 6px;
+            line-height: 1.5;
+        }
+        .user {
+            background: #ffffff;
+            align-self: flex-end;
+            border: 1px solid #ddd;
+        }
+        .assistant {
+            background: #d1f7d6;
+            align-self: flex-start;
+        }
+        .input-area {
+            display: flex;
+            border-top: 1px solid #ccc;
+            padding: 0.75em;
+            background: white;
+        }
+        .input-area textarea {
+            flex: 1;
+            padding: 0.5em;
+            font-size: 1em;
+            resize: none;
+        }
+        .input-area button {
+            margin-left: 0.5em;
+            padding: 0.5em 1em;
+            font-size: 1em;
+        }
+        .upload {
+            padding: 0.5em 1em;
+        }
+    </style>
+</head>
+<body>
+<div id="toggleSidebar" style="position:absolute;left:0;top:0;padding:6px;z-index:1000;background:#2e2e2e;color:white;cursor:pointer;">☰</div>
+<div class="container">
+    <div class="sidebar">
+        <h2>🧠 Liz GPT</h2>
+        <p>模型：<strong>GPT-4o-mini</strong></p>
+        <p>支持多轮对话 + Markdown 排版</p>
+<button onclick="setAPIKey()">🔑 设置 API Key</button>
+
+    </div>
+    <div class="chat-area">
+        <div class="toolbar">
+            <label for="fontSizeSelect">字体大小：</label>
+            <select id="fontSizeSelect" onchange="changeFontSize(this.value)">
+                <option value="14px">小</option>
+                <option value="16px" selected>中</option>
+                <option value="18px">大</option>
+                <option value="20px">特大</option>
+            </select>
+        </div>
+        <div class="messages" id="messages"></div>
+        
+<div style="padding: 0.5em 1em; text-align: right;">
+    
+</div>
+
+<div class="upload">
+            <input type="file" id="imageInput" accept="image/*">
+        </div>
+        <div class="input-area">
+            <textarea id="userInput" rows="2" placeholder="输入你的问题..."></textarea>
+            <button onclick="sendMessage()">发送</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const messagesEl = document.getElementById("messages");
+    const userInput = document.getElementById("userInput");
+    const imageInput = document.getElementById("imageInput");
+    const fontSizeSelect = document.getElementById("fontSizeSelect");
+
+    const API_KEY = localStorage.getItem("openai_api_key") || prompt("请输入你的 OpenAI API Key");
+    localStorage.setItem("openai_api_key", API_KEY);
+
+    let chatHistory = [];
+
+    userInput.addEventListener("keydown", function(event) {
+        if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+        }
+    });
+
+    function changeFontSize(size) {
+        document.querySelectorAll(".message").forEach(el => {
+            el.style.fontSize = size;
+        });
+    }
+
+    
+function setAPIKey() {
+    const newKey = prompt("请输入你的 OpenAI API Key（留空可清除）", localStorage.getItem("openai_api_key") || "");
+    if (newKey !== null) {
+        if (newKey.trim()) {
+            localStorage.setItem("openai_api_key", newKey.trim());
+            alert("✅ API Key 已保存！");
+        } else {
+            localStorage.removeItem("openai_api_key");
+            alert("🧹 API Key 已清除！");
+        }
+        location.reload();
+    }
+}
+
+
+async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text && !imageInput.files.length) return;
+
+        const userDiv = document.createElement("div");
+        userDiv.className = "message user";
+        userDiv.textContent = text || "[图片]";
+        userDiv.style.fontSize = fontSizeSelect.value;
+        messagesEl.appendChild(userDiv);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+
+        userInput.value = "";
+
+        let imageBase64 = null;
+        if (imageInput.files.length > 0) {
+            const file = imageInput.files[0];
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                imageBase64 = reader.result.split(",")[1];
+                imageInput.value = "";
+                await fetchGPT(text, imageBase64);
+            };
+            reader.readAsDataURL(file);
+        } else {
+            await fetchGPT(text, null);
+        }
+    }
+
+    async function fetchGPT(text, base64Image) {
+        const headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${API_KEY}`
+        };
+
+        let userContent = base64Image ? [
+            { type: "text", text: text },
+            {
+                type: "image_url",
+                image_url: {
+                    url: `data:image/jpeg;base64,${base64Image}`
+                }
+            }
+        ] : text;
+
+        chatHistory.push({ role: "user", content: userContent });
+
+        const body = JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: chatHistory,
+            temperature: 0.5
+        });
+
+        const assistantDiv = document.createElement("div");
+        assistantDiv.className = "message assistant";
+        assistantDiv.innerHTML = "<em>正在思考中...</em>";
+        assistantDiv.style.fontSize = fontSizeSelect.value;
+        messagesEl.appendChild(assistantDiv);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+
+        try {
+            const res = await fetch("https://api.openai.com/v1/chat/completions", {
+                method: "POST",
+                headers,
+                body
+            });
+            const data = await res.json();
+            const reply = data.choices[0].message.content;
+            assistantDiv.innerHTML = marked.parse(reply);
+            chatHistory.push({ role: "assistant", content: reply });
+        } catch (e) {
+            assistantDiv.innerHTML = "❗️出错了：" + e.message;
+        }
+    }
+
+document.getElementById('toggleSidebar').onclick = function () {
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar.style.display === 'none' || !sidebar.style.display) {
+    sidebar.style.display = 'flex';
+  } else {
+    sidebar.style.display = 'none';
+  }
+};
+
+</script>
+</body>
+</html>
